@@ -1,5 +1,8 @@
 package com.example.gramatika
 
+import android.annotation.SuppressLint
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -17,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
@@ -55,12 +57,12 @@ import com.example.gramatika.ui.theme.Chevron_left
 import com.example.gramatika.ui.theme.Chevron_right
 import com.example.gramatika.ui.theme.Keyboard_double_arrow_right
 import com.example.gramatika.ui.theme.Tree
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
+@SuppressLint("CoroutineCreationDuringComposition")
 @Composable
 fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
-    // Mutable state for the input field
-
     var input by remember { mutableStateOf(preInput) }
     var printInput by remember { mutableStateOf(preInput) }
     val rules = grammarViewModel.getIndividualRules()
@@ -75,8 +77,8 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
     val focusManager = LocalFocusManager.current
 
     val scale = remember { mutableFloatStateOf(1f) }
-    val offsetX = remember { mutableFloatStateOf(0f) }
-    val offsetY = remember { mutableFloatStateOf(0f) }
+    val offsetX = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(0f) }
     val canvasSize = remember { mutableStateOf(Size.Zero) }
 
     Column(
@@ -107,7 +109,6 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
                     coroutineScope.launch {
                         result = parse(input, rules, terminals, type)
                         parseFlag = true // Parsing complete
-
                     }
                 },
             ) {
@@ -132,8 +133,10 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
                             ) {
                                 DAGCanvas(tree, scale, offsetX, offsetY, steps, type, canvasSize)
                                 if(steps == 0){
-                                    focusNode(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
-                                }
+                                    coroutineScope.launch {
+                                        focusNodeAnimated(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
+                                    }
+                                    }
                                 IconButton(
                                     onClick = { showTree = false },
                                     modifier = Modifier
@@ -155,8 +158,10 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
                                 IconButton(
                                     onClick = {
                                         if (steps < result?.size!!) {
-                                            steps++
-                                            focusNode(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
+                                            coroutineScope.launch {
+                                                steps++
+                                                focusNodeAnimated(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
+                                            }
                                         }
                                               },
                                     modifier = Modifier
@@ -168,9 +173,10 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
                                 IconButton(
                                     onClick = {
                                         if (steps > 0) {
-                                            steps--
-                                            focusNode(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
-                                        }
+                                            coroutineScope.launch {
+                                                steps--
+                                                focusNodeAnimated(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
+                                            }}
                                               },
                                     modifier = Modifier
                                         .align(Alignment.BottomStart)
@@ -253,15 +259,20 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String = "") {
                     }
                 }
             }
-
     }
 }
 
 @Composable
-fun LinearDerivation(steps: List<Step>){
-
-        Text("S ⇒ " + steps.joinToString(" ⇒ ") { it.stateString.replace("ε", "") })
-
+fun LinearDerivation(steps: List<Step>) {
+    Text(
+        "S ⇒ " + steps.joinToString(" ⇒ ") {
+            if (it.stateString == "ε") {
+                "ε"
+            } else {
+                it.stateString.replace("ε", "")
+            }
+        }
+    )
 }
 
 @Composable
@@ -340,6 +351,7 @@ fun StateTable(steps: List<Step>) {
                         // Append the rest of the baseString if there is any
                         append(state.previous.replace("ε","").drop(diffIndex + state.appliedRule.left.length))
                     }
+
                     Text(
                         text = state.appliedRule.toString(), // Use the overridden toString() from GrammarRule
                         modifier = Modifier.weight(1f),
@@ -495,8 +507,8 @@ fun DAGCanvas
 (
     root: DAGNode,
     scale: MutableState<Float>,
-    offsetX: MutableState<Float>,
-    offsetY: MutableState<Float>,
+    offsetX: Animatable<Float, AnimationVector1D>,
+    offsetY: Animatable<Float, AnimationVector1D>,
     step: Int,
     type: GrammarType,
     canvasSize: MutableState<Size>
@@ -527,12 +539,17 @@ fun DAGCanvas
                     canvasSize.value = Size(layoutSize.width.toFloat(), layoutSize.height.toFloat())
                 }
                 .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale.value = (scale.value * zoom).coerceIn(0.1f, 5f)
-                        offsetX.value += pan.x
-                        offsetY.value += pan.y
+                    coroutineScope {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale.value = (scale.value * zoom).coerceIn(0.1f, 5f)
+                            launch {
+                                offsetX.snapTo(offsetX.value + pan.x)
+                                offsetY.snapTo(offsetY.value + pan.y)
+                            }
+                        }
                     }
                 }
+
                 .clipToBounds()
             ) {
 
@@ -550,8 +567,6 @@ fun DAGCanvas
     }
 
 }
-
-
 
 fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: TextMeasurer, step: Int, highlightEffect: PathEffect? = null) {
     nodes.forEach { node ->
@@ -662,18 +677,51 @@ fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: Tex
 }
 
 
-fun focusNode(root: DAGNode, step: Int, offsetX: MutableState<Float>, offsetY: MutableState<Float>, scale: Float, canvasWidth: Float, canvasHeight: Float) {
+//fun focusNode(root: DAGNode, step: Int, offsetX: Animatable<Float, AnimationVector1D>, offsetY: Animatable<Float, AnimationVector1D>, scale: Float, canvasWidth: Float, canvasHeight: Float) {
+//    val allNodes = mutableSetOf<DAGNode>()
+//    collect(root,allNodes,step)
+//    val targetNode = allNodes.find { it.step == step }
+//
+//    if (targetNode != null) {
+//        if(step!=0){
+//            offsetX.value = canvasWidth / 2f - (targetNode.parents.first().x + targetNode.parents.last().x)/2 * scale
+//            offsetY.value = canvasHeight / 2f - targetNode.parents.first().y * scale
+//        }else{
+//            offsetX.value = canvasWidth / 2f - targetNode.x * scale
+//            offsetY.value = canvasHeight / 2f - targetNode.y * scale
+//        }
+//    }
+//}
+
+suspend fun focusNodeAnimated(
+    root: DAGNode,
+    step: Int,
+    offsetX: Animatable<Float, AnimationVector1D>,
+    offsetY: Animatable<Float, AnimationVector1D>,
+    scale: Float,
+    canvasWidth: Float,
+    canvasHeight: Float
+) {
     val allNodes = mutableSetOf<DAGNode>()
-    collect(root,allNodes,step)
+    collect(root, allNodes, step)
     val targetNode = allNodes.find { it.step == step }
 
     if (targetNode != null) {
-        if(step!=0){
-            offsetX.value = canvasWidth / 2f - (targetNode.parents.first().x + targetNode.parents.last().x)/2 * scale
-            offsetY.value = canvasHeight / 2f - targetNode.parents.first().y * scale
-        }else{
-            offsetX.value = canvasWidth / 2f - targetNode.x * scale
-            offsetY.value = canvasHeight / 2f - targetNode.y * scale
+        val targetX = if (step != 0 && targetNode.parents.size >= 2) {
+            (targetNode.parents.first().x + targetNode.parents.last().x) / 2
+        } else {
+            targetNode.x
         }
+
+        val targetY = if (step != 0 && targetNode.parents.isNotEmpty()) {
+            targetNode.parents.first().y
+        } else {
+            targetNode.y
+        }
+
+        offsetX.animateTo(canvasWidth / 2f - targetX * scale)
+        offsetY.animateTo(canvasHeight / 2f - targetY * scale)
     }
 }
+
+
