@@ -14,13 +14,8 @@ fun parse(input: String, rules: List<GrammarRule>, terminals: Set<Char>, type: G
 
     // Initialize the queue with rules with the start symbol "S"
     rules.filter { it.left == "S" }.forEach { rule ->
-        if(rule.right == input){
-            stateHistory[rule.right] = State("S", rule)
-            return reconstructDerivation(rule.right, stateHistory)
-        }else{
-            states.add(rule.right)
-            stateHistory[rule.right] = State("S", rule)
-        }
+        states.add(rule.right)
+        stateHistory[rule.right] = State("S", rule)
     }
 
     val maxDepth = (100*exp(0.5*input.length)).toInt()

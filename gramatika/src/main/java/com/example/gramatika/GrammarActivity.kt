@@ -129,7 +129,7 @@ fun TopNavigationBar(navController: NavHostController, grammarViewModel: Grammar
             }}
         },
         actions = {
-            Constants.TopNavItems.forEach { navItem ->
+            NavConstants.TopNavItems.forEach { navItem ->
                 IconButton(
                     onClick = {
                         if (currentRoute != navItem.route && grammarViewModel.isGrammarFinished.value == true) {

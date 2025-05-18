@@ -137,6 +137,32 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                                     focusNodeAnimated(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
                                 }
                             }
+                            if (steps == 1+result?.size!!) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .zIndex(2f)// Ensure it's on top
+                                        .padding(bottom = 64.dp),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally){
+                                        Text(
+                                            text = "Derivation completed",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = Color.White,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(text = input,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xff7bc2ed),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
                             IconButton(
                                 onClick = { showTree = false },
                                 modifier = Modifier
@@ -162,6 +188,8 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                                             steps++
                                             focusNodeAnimated(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
                                         }
+                                    }else if(steps == result?.size!!){
+                                        steps++
                                     }
                                 },
                                 modifier = Modifier
@@ -195,7 +223,6 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                 ){
 
                     if (it != null){
-//                            showTable = true
                         Text(text =  buildAnnotatedString{
                             withStyle(style = SpanStyle(fontStyle = FontStyle.Italic, fontSize = 20.sp)) {
                                 append("\"$printInput\"")
@@ -313,7 +340,7 @@ fun StateTable(steps: List<Step>) {
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "State",
+                text = "String",
                 modifier = Modifier.weight(2f),
                 style = MaterialTheme.typography.titleLarge,
                 textAlign = TextAlign.Center
@@ -451,7 +478,7 @@ class DAGNode(
 fun layoutPrettyTree(root: DAGNode, type: GrammarType, nodeSpacing: Float = 100f, layerHeight: Float = 150f) {
     var nextX = 0f  // Tracks current horizontal position for leaves
 
-    fun firstWalk(node: DAGNode, depth: Int = 0) {
+    fun walk(node: DAGNode, depth: Int = 0) {
 
         node.depth.add(depth*layerHeight)
 
@@ -472,27 +499,15 @@ fun layoutPrettyTree(root: DAGNode, type: GrammarType, nodeSpacing: Float = 100f
                 }
             }
         } else {
-            children.forEach { firstWalk(it, depth + 1) }
+            children.forEach { walk(it, depth + 1) }
             // Internal node: center above children
             val left = children.first()
             val right = children.last()
             node.x = (left.x + right.x) / 2f
         }
     }
-    firstWalk(root)
-//    fun secondWalk(node: DAGNode, modSum: Float = 0f) {
-//        node.x = node.x + modSum
-//        node.children.forEach {
-//            secondWalk(it, modSum)
-//        }
-//    }
-//    secondWalk(root)
+    walk(root)
 
-    // Normalize to ensure X starts at 0
-//    val minX = getAllNodes(root).minOf { it.x }
-//    if (minX < 0f) {
-//        getAllNodes(root).forEach { it.x -= minX }
-//    }
 }
 
 fun collect(node: DAGNode, nodes: MutableSet<DAGNode>, step: Int) {
@@ -622,12 +637,7 @@ fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: Tex
                 size = Size(node.children.first().parents.last().x+size+15 - (node.x-15-size), node.y+size+15 - (node.y-15-size)),
                 cornerRadius = CornerRadius(size,size)
             )
-//            drawLine(
-//                start = Offset(node.x-size, y-size),
-//                end = Offset(node.children.first().parents.last().x+size, node.children.first().parents.last().y+size),
-//                strokeWidth = size*2,
-//                color = Color.Blue
-//            )
+
         }
         val color = if (!node.label.isDigit() && node.label.isUpperCase()) {
             Color(0xff77e681)
@@ -676,23 +686,6 @@ fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: Tex
     }
 }
 
-
-//fun focusNode(root: DAGNode, step: Int, offsetX: Animatable<Float, AnimationVector1D>, offsetY: Animatable<Float, AnimationVector1D>, scale: Float, canvasWidth: Float, canvasHeight: Float) {
-//    val allNodes = mutableSetOf<DAGNode>()
-//    collect(root,allNodes,step)
-//    val targetNode = allNodes.find { it.step == step }
-//
-//    if (targetNode != null) {
-//        if(step!=0){
-//            offsetX.value = canvasWidth / 2f - (targetNode.parents.first().x + targetNode.parents.last().x)/2 * scale
-//            offsetY.value = canvasHeight / 2f - targetNode.parents.first().y * scale
-//        }else{
-//            offsetX.value = canvasWidth / 2f - targetNode.x * scale
-//            offsetY.value = canvasHeight / 2f - targetNode.y * scale
-//        }
-//    }
-//}
-
 suspend fun focusNodeAnimated(
     root: DAGNode,
     step: Int,
@@ -709,7 +702,10 @@ suspend fun focusNodeAnimated(
     if (targetNode != null) {
         val targetX = if (step != 0 && targetNode.parents.size >= 2) {
             (targetNode.parents.first().x + targetNode.parents.last().x) / 2
-        } else {
+        } else if(step != 0){
+            (targetNode.parents.first().children.first().x + targetNode.parents.first().children.last().x)/2
+        }
+        else {
             targetNode.x
         }
 
