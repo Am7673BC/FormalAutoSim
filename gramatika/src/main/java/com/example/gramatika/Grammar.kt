@@ -11,8 +11,6 @@ import java.io.OutputStream
 import java.nio.charset.Charset
 import javax.xml.parsers.DocumentBuilderFactory
 
-
-
 class Grammar : ViewModel() {
     // LiveData to hold the list of grammar rules
     private val _rules = MutableLiveData<List<GrammarRule>>(emptyList())
@@ -41,7 +39,9 @@ class Grammar : ViewModel() {
             return
         }
         _rules.value = _rules.value?.plus(newRule)
-        grammarType(newRule)
+        for(ruleRight in newRule.right.split('|')){
+            grammarType(GrammarRule(newRule.left,ruleRight))
+        }
         updateSymbols()
     }
 
@@ -159,6 +159,7 @@ class Grammar : ViewModel() {
                         }
                     }
                 }
+                toggleGrammarFinished()
             }
         } catch (e: Exception) {
 

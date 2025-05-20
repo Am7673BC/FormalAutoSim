@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.*
 
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
@@ -81,12 +83,36 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
     val offsetY = remember { Animatable(0f) }
     val canvasSize = remember { mutableStateOf(Size.Zero) }
 
+    val tree = remember(result) {
+        result?.let {
+            val built = buildTree(it)
+            if (type == GrammarType.UNRESTRICTED || type == GrammarType.CONTEXT_SENSITIVE) {
+                layoutPrettyTreeUnrestricted(built)
+            } else {
+                layoutPrettyTreeRestricted(built)
+            }
+            built
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 10.dp)
     ) {
+        Text(
+            text = "Test an input",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 8.dp, end = 8.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier
+                .height(4.dp)
+                .fillMaxWidth(),
 
+            color = MaterialTheme.colorScheme.primary
+        )
         Row(verticalAlignment = Alignment.CenterVertically){
             OutlinedTextField(
                 value = input, // Use the current state as the value
@@ -95,7 +121,7 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                     input = it
                 }, // Update the state on value change
                 placeholder = { Text("string containing only terminals") }, // Update the label text
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).padding(top = 4.dp),
                 singleLine = true
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -120,10 +146,7 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
             result.let {
                 if (showTree) {
                     var steps by remember { mutableIntStateOf(0) }
-                    val tree :DAGNode
                     if(it != null){
-                        tree = buildTree(it)
-                        layoutPrettyTree(tree,type)
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -131,7 +154,7 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                                 .zIndex(1f) // Ensure it's on top
 
                         ) {
-                            DAGCanvas(tree, scale, offsetX, offsetY, steps, type, canvasSize)
+                            DAGCanvas(tree!!, scale, offsetX, offsetY, steps, type, canvasSize)
                             if(steps == 0){
                                 coroutineScope.launch {
                                     focusNodeAnimated(tree, steps, offsetX, offsetY, scale.floatValue, canvasSize.value.width, canvasSize.value.height)
@@ -156,7 +179,7 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                                         )
                                         Text(text = input,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Color(0xff7bc2ed),
+                                            color = Color.Yellow,
                                             textAlign = TextAlign.Center
                                         )
                                     }
@@ -215,7 +238,9 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                         }
                     }
                 }
-
+                //**********
+                // Input accepted/notaccepted
+                //**********
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -232,7 +257,8 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                             modifier = Modifier
                                 .weight(1f)
                                 .background(color = Color(0xFF38F292)),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            color = Color.Black
                         )
                     }else{
                         Text(text =  buildAnnotatedString{
@@ -250,6 +276,10 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                     }
                 }
                 if(it != null){
+                    //***********
+                    //  Visual options
+                    //***********
+
                     Row(modifier = Modifier
                         .fillMaxWidth()
                         .padding(6.dp),
@@ -271,7 +301,9 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                         }
                         IconButton(
                             onClick = {
-                                showTree = true}
+                                showTree = true
+
+                            }
                         ){
                             Icon(Tree, "Tree button", tint = MaterialTheme.colorScheme.primary)
                         }
@@ -283,23 +315,47 @@ fun TestInputScreen(grammarViewModel: Grammar, preInput: String) {
                         LinearDerivation(it)
                     }
 
+
+                }
+            }
+        }
+        if(!parseFlag || result == null){
+            Text(
+                text = "Rules",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 12.dp, start = 8.dp, end = 8.dp)
+            )
+            LazyColumn(){
+                items(rules){ rule->
+                    DisplayRule(
+                        rule = rule,
+                        grammarViewModel = grammarViewModel,
+                        grammarViewModel.isGrammarFinished.value!!,
+                        { Unit }
+                    )
                 }
             }
         }
     }
+
+
 }
 
 @Composable
 fun LinearDerivation(steps: List<Step>) {
-    Text(
-        "S ⇒ " + steps.joinToString(" ⇒ ") {
-            if (it.stateString == "ε") {
-                "ε"
-            } else {
-                it.stateString.replace("ε", "")
+    Box(
+        modifier = Modifier
+            .border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
+            .padding(8.dp) // Inner padding
+    ) {
+        Text(
+            text = "S ⇒ " + steps.joinToString(" ⇒ ") {
+                if (it.stateString == "ε") "ε" else it.stateString.replace("ε", "")
             }
-        }
-    )
+        )
+    }
+
 }
 
 @Composable
@@ -309,7 +365,7 @@ fun StateTable(steps: List<Step>) {
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(6.dp)
-        .border(BorderStroke(2.dp, Color.Black))
+        .border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
     ) {
         // Table Header
         Row(modifier = Modifier.padding(horizontal = 6.dp)) {
@@ -424,8 +480,8 @@ fun buildTree(steps: List<Step>): DAGNode {
         require(replacePos != -1) { "Rule application mismatch" }
 
         // Create new child nodes
-        val newChildren = step.appliedRule.right.mapTo(mutableSetOf()) {symbol ->
-            DAGNode(stepIdx+1, symbol, mutableSetOf(), mutableSetOf())
+        val newChildren = step.appliedRule.right.mapTo(LinkedHashSet()) { symbol ->
+            DAGNode(stepIdx + 1, symbol, LinkedHashSet(), LinkedHashSet())
         }
 
         for(i in 0..< step.appliedRule.left.length){
@@ -444,7 +500,7 @@ fun buildTree(steps: List<Step>): DAGNode {
 
 
 private fun getCurrentLeaves(node: DAGNode): MutableList<DAGNode> {
-    val leaves = mutableListOf<DAGNode>()
+    val leaves = LinkedHashSet<DAGNode>()
     fun traverse(n: DAGNode) {
         if (n.children.isEmpty()) {
             leaves.add(n)
@@ -453,8 +509,9 @@ private fun getCurrentLeaves(node: DAGNode): MutableList<DAGNode> {
         }
     }
     traverse(node)
-    return leaves
+    return leaves.toMutableList()
 }
+
 
 class DAGNode(
     val step: Int,
@@ -466,21 +523,125 @@ class DAGNode(
         children.add(child)
         child.parents.add(this)
     }
+    override fun toString(): String {
+        return label.toString()
+    }
 
     // For layout purposes
-    var x: Float = 0f
+    var x: Float = 1f
     var y: Float = 0f
     val depth: MutableSet<Float> = LinkedHashSet()
 
 
 }
 
-fun layoutPrettyTree(root: DAGNode, type: GrammarType, nodeSpacing: Float = 100f, layerHeight: Float = 150f) {
+fun layoutPrettyTreeUnrestricted(root: DAGNode, nodeSpacing: Float = 120f, layerHeight: Float = 150f){
     var nextX = 0f  // Tracks current horizontal position for leaves
 
-    fun walk(node: DAGNode, depth: Int = 0) {
+    fun firstWalk(node: DAGNode, depth: Int = 0, visited: MutableSet<DAGNode> = mutableSetOf()) {
+        if (!visited.add(node)){
+            val maxParentDepth = node.parents.flatMap { it.depth }.maxOrNull()
+            if(maxParentDepth == null){
+                return
+            }else{
+                node.depth.clear()
+                node.depth.add(maxParentDepth +layerHeight)
+            }
+            return
+        }
+        node.depth.add(depth*layerHeight)
+
+        val children = node.children
+        if(children.isEmpty()){
+            if(node.x == 1f){
+                node.x = nextX
+                nextX += nodeSpacing
+            }
+        }else{
+            children.forEach{firstWalk(it, depth+1, visited)}
+
+            val left = children.first()
+            val right = children.last()
+            val parentsSize = left.parents.size
+            if(children.size < parentsSize && left.parents.first() == node){
+                val space = (parentsSize-1)*nodeSpacing
+                val childrenSpace = (children.size-1) * nodeSpacing
+                var start =(space-childrenSpace)/2f
+                for(it in children){
+                    it.x += start
+                    start += nodeSpacing
+                }
+            }
+            if(left.parents.size == 1){
+                node.x = (left.x + right.x) / 2
+            } else{
+                val parentCount = right.parents.size
+                val nodeIndex = right.parents.indexOf(node)
+                val centerOffset = (parentCount - 1) / 2f
+                val offset = (nodeIndex - centerOffset) * nodeSpacing
+
+                node.x = (left.x + right.x) / 2f + offset
+
+            }
+        }
+
+    }
+    firstWalk(root)
+
+    fun secondWalk(node: DAGNode, layerHeight: Float, visited: MutableSet<DAGNode> = mutableSetOf()) {
+        if (!visited.add(node)) return  // Skip if already visited
+
+        // Recurse first
+        node.children.forEach { secondWalk(it, layerHeight, visited) }
+
+        if (node.children.isNotEmpty()) {
+            val commonDepth = node.children
+                .map { it.depth }
+                .reduceOrNull { acc, set -> acc.intersect(set).toMutableSet() }
+                ?.maxOrNull()
+
+            if (commonDepth != null) {
+                node.depth.add(commonDepth - layerHeight)
+            }
+        }
+    }
+    secondWalk(root,layerHeight)
+
+
+//        if (children.isEmpty()) {
+//            // Leaf node: assign and increment next available X
+//            if(node.x == 1f){
+//                node.x = nextX
+//                nextX += nodeSpacing
+//            }
+//            if(node.depth.size == node.parents.size){
+//                val max = node.depth.max()
+//                node.depth.clear()
+//                node.depth.add(max)
+//                node.parents.forEach{
+//                    it.depth.add(max-layerHeight)
+//                }
+//            }
+//
+//        } else {
+//            children.forEach { firstWalk(it, depth + 1) }
+//            children.forEach { firstWalk(it, depth + 1) }
+//            // Internal node: center above children
+//            val left = children.first()
+//            val right = children.last()
+//            node.x = (left.x + right.x) / 2f
+//        }
+//    }
+//    firstWalk(root)
+}
+
+fun layoutPrettyTreeRestricted(root: DAGNode, nodeSpacing: Float = 100f, layerHeight: Float = 150f) {
+    var nextX = 0f  // Tracks current horizontal position for leaves
+
+    fun firstWalk(node: DAGNode, depth: Int = 0) {
 
         node.depth.add(depth*layerHeight)
+
 
         val children = node.children
 
@@ -488,26 +649,15 @@ fun layoutPrettyTree(root: DAGNode, type: GrammarType, nodeSpacing: Float = 100f
             // Leaf node: assign and increment next available X
             node.x = nextX
             nextX += nodeSpacing
-            if(type == GrammarType.UNRESTRICTED || type == GrammarType.CONTEXT_SENSITIVE){
-                if(node.depth.size == node.parents.size){
-                    val max = node.depth.max()
-                    node.depth.clear()
-                    node.depth.add(max)
-                    node.parents.forEach{
-                        it.depth.add(max-layerHeight)
-                    }
-                }
-            }
         } else {
-            children.forEach { walk(it, depth + 1) }
+            children.forEach { firstWalk(it, depth + 1) }
             // Internal node: center above children
             val left = children.first()
             val right = children.last()
             node.x = (left.x + right.x) / 2f
         }
     }
-    walk(root)
-
+    firstWalk(root)
 }
 
 fun collect(node: DAGNode, nodes: MutableSet<DAGNode>, step: Int) {
@@ -533,7 +683,10 @@ fun DAGCanvas
 
     collect(root, allNodes, step)
     if(type == GrammarType.UNRESTRICTED || type == GrammarType.CONTEXT_SENSITIVE){
-        allNodes = allNodes.sortedWith(compareBy { it.depth.min()}).toCollection(LinkedHashSet())
+        allNodes = allNodes
+            .sortedWith(compareBy({ it.depth.max() }, { it.x }))
+            .toCollection(LinkedHashSet())
+
     }
     val textMeasurer = rememberTextMeasurer()
     val infiniteTransition = rememberInfiniteTransition(label = "dash-animation")
@@ -584,48 +737,69 @@ fun DAGCanvas
 }
 
 fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: TextMeasurer, step: Int, highlightEffect: PathEffect? = null) {
-    nodes.forEach { node ->
-        node.y = if(node.children.isNotEmpty() && step < node.children.first().step  ){
-            node.depth.toList().first()
-        }else{
-            node.depth.toList().last()
-        }
+    val leafColor = if(step == nodes.maxOf { it.step }+1){
+        Color.Yellow
+    }else{
+        Color.White
     }
     nodes.forEach { node ->
-
+        node.y = if(node.children.isNotEmpty() && step < node.children.first().step  ){
+            node.depth.min()
+        }else{
+            node.depth.max()
+        }
+    }
+    val visitedChildren = mutableSetOf<DAGNode>()
+    nodes.forEach { node ->
         // Draw edges
         if(node.children.isNotEmpty() && node.children.first().step <= step/*any(){it.step <= step}*/){
-            node.children.forEach { child ->
-                if(child.parents.size > 1 && child.parents.first() == node){
+            for(child in node.children){
+                if(!visitedChildren.add(child)){
+                    continue
+                }
+                if(child.parents.size > 1){
                     val x = child.parents.map { it.x }.average().toFloat()
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(x, node.y),
-                        end = Offset(child.x, child.depth.toList()[0]),
-                        strokeWidth = 5f
-                    )
-                }else if(child.parents.size < 2){
-                    for (i in 0..<child.depth.toList().size) {
-                        if(i == 0){
-                            drawLine(
-                                color = Color.White,
-                                start = Offset(node.x, node.y),
-                                end = Offset(child.x, child.depth.toList()[0]),
-                                strokeWidth = 5f
-                            )
-                        }else{
-                            drawLine(
-                                color = Color.White,
-                                start = Offset(child.x, child.depth.toList()[0]),
-                                end = Offset(child.x, child.depth.toList()[1]),
-                                strokeWidth = 5f
-                            )
-                        }
 
-                        if(child.children.isNotEmpty() && child.children.first().step > step){
-                            break
-                        }
-                    }
+// Draw from node.y to minDepth
+//                    drawLine(
+//                        color = Color.White,
+//                        start = Offset(x, node.y),
+//                        end = Offset(child.x, minDepth),
+//                        strokeWidth = 5f
+//                    )
+//// Only draw the vertical segment if we’re not already at max depth
+//                    if (child.y == maxDepth) {
+//                        drawLine(
+//                            color = Color.White,
+//                            start = Offset(child.x, minDepth),
+//                            end = Offset(child.x, maxDepth),
+//                            strokeWidth = 5f
+//                        )
+//                    }
+                    drawEdgeToChild(x,node.y,child)
+                }else{
+                    drawEdgeToChild(node.x,node.y,child)
+//                    for (i in 0..<child.depth.size) {
+//                        if(i == 0){
+//                            drawLine(
+//                                color = Color.White,
+//                                start = Offset(node.x, node.y),
+//                                end = Offset(child.x, minDepth),
+//                                strokeWidth = 5f
+//                            )
+//                        }else{
+//                            drawLine(
+//                                color = Color.White,
+//                                start = Offset(child.x, minDepth),
+//                                end = Offset(child.x, maxDepth),
+//                                strokeWidth = 5f
+//                            )
+//                        }
+//
+//                        if(child.children.isNotEmpty() && child.children.first().step > step){
+//                            break
+//                        }
+//                    }
                 }
             }
         }
@@ -637,7 +811,12 @@ fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: Tex
                 size = Size(node.children.first().parents.last().x+size+15 - (node.x-15-size), node.y+size+15 - (node.y-15-size)),
                 cornerRadius = CornerRadius(size,size)
             )
-
+//            drawLine(
+//                start = Offset(node.x-size, y-size),
+//                end = Offset(node.children.first().parents.last().x+size, node.children.first().parents.last().y+size),
+//                strokeWidth = size*2,
+//                color = Color.Blue
+//            )
         }
         val color = if (!node.label.isDigit() && node.label.isUpperCase()) {
             Color(0xff77e681)
@@ -669,7 +848,7 @@ fun DrawScope.drawDAG(nodes: Collection<DAGNode>, size: Float, textMeasurer: Tex
             text = node.label.toString(),
             style = TextStyle(
                 fontSize = 20.sp,
-                color = Color.White,
+                color = if(node.children.isEmpty()){ leafColor }else{Color.White},
                 textAlign = TextAlign.Center
             )
         )
@@ -720,4 +899,50 @@ suspend fun focusNodeAnimated(
     }
 }
 
+//fun focusNode(root: DAGNode, step: Int, offsetX: Animatable<Float, AnimationVector1D>, offsetY: Animatable<Float, AnimationVector1D>, scale: Float, canvasWidth: Float, canvasHeight: Float) {
+//    val allNodes = mutableSetOf<DAGNode>()
+//    collect(root,allNodes,step)
+//    val targetNode = allNodes.find { it.step == step }
+//
+//    if (targetNode != null) {
+//        if(step!=0){
+//            offsetX.value = canvasWidth / 2f - (targetNode.parents.first().x + targetNode.parents.last().x)/2 * scale
+//            offsetY.value = canvasHeight / 2f - targetNode.parents.first().y * scale
+//        }else{
+//            offsetX.value = canvasWidth / 2f - targetNode.x * scale
+//            offsetY.value = canvasHeight / 2f - targetNode.y * scale
+//        }
+//    }
+//}
+
+fun DrawScope.drawEdgeToChild(
+    parentX: Float,
+    parentY: Float,
+    child: DAGNode,
+    color: Color = Color.White,
+    strokeWidth: Float = 5f
+) {
+    if (child.depth.isEmpty()) return
+
+    val minDepth = child.depth.min()
+    val maxDepth = child.depth.max()
+
+    // Draw from parent to top of child
+    drawLine(
+        color = color,
+        start = Offset(parentX, parentY),
+        end = Offset(child.x, minDepth),
+        strokeWidth = strokeWidth
+    )
+
+    // Draw vertical from min to max depth (if needed)
+    if (child.y == maxDepth) {
+        drawLine(
+            color = color,
+            start = Offset(child.x, minDepth),
+            end = Offset(child.x, maxDepth),
+            strokeWidth = strokeWidth
+        )
+    }
+}
 
